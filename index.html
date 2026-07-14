@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Bosquecitos</title>
+<title>Tanquecitos</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  html,body { width:100%; height:100%; background:#0f2a12; overflow:hidden; font-family:'Courier New',monospace; user-select:none; }
+  html,body { width:100%; height:100%; background:#1a1a2e; overflow:hidden; font-family:'Courier New',monospace; user-select:none; }
   #wrap { display:flex; flex-direction:column; width:100%; height:100%; }
   #hud {
     flex-shrink:0; display:flex; justify-content:space-between; align-items:center;
-    padding:4px 10px; background:#0a1f0d; font-size:10px; letter-spacing:1px;
+    padding:4px 10px; background:#0d0d1a; font-size:10px; letter-spacing:1px;
   }
   .hud-lives { display:flex; gap:3px; align-items:center; }
   .life-icon { font-size:13px; }
@@ -20,7 +20,7 @@
     flex-shrink:0; display:flex;
     flex-direction:row; justify-content:space-between; align-items:center;
     gap:8px; padding:5px 14px 6px;
-    background:#0a1f0d;
+    background:#0d0d1a;
   }
   #dpad { display:grid; grid-template-columns:48px 48px 48px; grid-template-rows:40px 40px; gap:4px; }
   .btn {
@@ -32,18 +32,18 @@
   }
   .btn:active,.btn.pressed { background:rgba(100,220,100,0.35); border-color:#64dc64; }
   .btn-fire {
-    background:rgba(180,120,60,0.2); border-color:rgba(180,120,60,0.5); color:#d4a017;
+    background:rgba(255,80,80,0.15); border-color:rgba(255,80,80,0.5); color:#ff5050;
     width:62px; height:62px; font-size:20px; border-radius:50%; flex-shrink:0;
   }
-  .btn-fire:active,.btn-fire.pressed { background:rgba(180,120,60,0.5); border-color:#d4a017; }
+  .btn-fire:active,.btn-fire.pressed { background:rgba(255,80,80,0.45); border-color:#ff5050; }
 </style>
 </head>
 <body>
 <div id="wrap">
   <div id="hud">
     <div class="hud-lives" id="livesEl"></div>
-    <div style="color:#64dc64;font-size:9px">🌿 BOSQUECITOS</div>
-    <div style="color:#d4a017">SABIDURÍA: <span id="scoreEl" style="color:#fff;font-weight:700">0</span></div>
+    <div style="color:#64dc64;font-size:9px">🎮 TANQUECITOS</div>
+    <div style="color:#f7c948">SCORE: <span id="scoreEl" style="color:#fff;font-weight:700">0</span></div>
   </div>
   <div id="canvasWrap">
     <canvas id="c" tabindex="0"></canvas>
@@ -57,7 +57,7 @@
       <button class="btn" id="btnD">▼</button>
       <button class="btn" id="btnR">▶</button>
     </div>
-    <button class="btn-fire btn" id="btnFire">🌱</button>
+    <button class="btn-fire btn" id="btnFire">●</button>
   </div>
 </div>
 <script>
@@ -76,20 +76,19 @@ function resize() {
 window.addEventListener('load', () => { setTimeout(() => { resize(); startGame(); }, 100); });
 window.addEventListener('resize', () => { resize(); draw(); });
 
-// ── COLORES DEL BOSQUE ────────────────────────────────────
+// ── COLORES ────────────────────────────────────────────────
 const C = {
-  suelo:    '#2d5a1b', sueloDark:'#1e3d12',
-  raiz:     '#8b7355', raizTop:  '#a08060', raizSide:'#6b5535',
-  guardianBody:'#3a8c3a', guardianDark:'#1e5c1e', guardianBarrel:'#2a6c2a',
-  spirit:   ['#c0180c','#1840c0','#c0a010','#c040c0'],
-  semilla:  '#ffe060',
-  estallido:['#8b5e3c','#5c3d1f','#d4a017','#a8d08d'],
+  grass:    '#2d5a1b', grassDark:'#1e3d12',
+  wall:     '#8b7355', wallTop:  '#a08060', wallSide:'#6b5535',
+  playerBody:'#3a8c3a', playerDark:'#1e5c1e', playerBarrel:'#2a6c2a',
+  enemy:    ['#c0180c','#1840c0','#c0a010','#c040c0'],
+  bullet:   '#ffe060',
+  explosion:['#ff8020','#ff4010','#ffe060','#fff'],
   hud:      '#64dc64',
 };
 
-// ── MAPA DEL BOSQUE SAGRADO ──────────────────────────────
-// 0=suelo musgoso, 1=raíces destructibles, 2=pilares de piedra antiguos, 3=spawn guardián, 4=spawn espíritus
-const BOSQUE_TEMPLATE = [
+// ── MAPA ───────────────────────────────────────────────────
+const MAP_TEMPLATE = [
   [2,2,2,2,2,2,2,2,2,2,2,2,2],
   [2,0,0,1,0,0,0,0,0,1,0,0,2],
   [2,0,1,1,0,1,0,1,0,1,1,0,2],
@@ -103,15 +102,15 @@ const BOSQUE_TEMPLATE = [
   [2,2,2,2,2,2,2,2,2,2,2,2,2],
 ];
 
-const ESPIRITU_SPAWNS = [{c:1,r:1},{c:6,r:1},{c:11,r:1},{c:3,r:1},{c:9,r:1}];
-const GUARDIAN_SPAWN = {c:6, r:8};
+const ENEMY_SPAWNS = [{c:1,r:1},{c:6,r:1},{c:11,r:1},{c:3,r:1},{c:9,r:1}];
+const PLAYER_SPAWN = {c:6, r:8};
 
-let bosque, guardian, spirits, proyectiles, estallidos;
+let map, player, enemies, bullets, explosions;
 let score=0, lives=3, wave=1, gameState='playing';
 let stateTimer=0;
 const TICK_MS = 80;
 let gameInterval=null;
-let spiritsToSpawn=0, spawnTimer=0, spawnIdx=0;
+let enemiesToSpawn=0, spawnTimer=0, spawnIdx=0;
 
 // ── INICIO ────────────────────────────────────────────────
 function startGame() {
@@ -122,24 +121,24 @@ function startGame() {
 }
 
 function initWave() {
-  bosque = BOSQUE_TEMPLATE.map(r=>[...r]);
-  const sp = GUARDIAN_SPAWN;
-  guardian = makeGuardian(sp.c, sp.r, 0, 'guardian');
-  spirits = [];
-  proyectiles = [];
-  estallidos = [];
-  spiritsToSpawn = 2 + wave * 2;
+  map = MAP_TEMPLATE.map(r=>[...r]);
+  const sp = PLAYER_SPAWN;
+  player = makeTank(sp.c, sp.r, 0, 'player');
+  enemies = [];
+  bullets = [];
+  explosions = [];
+  enemiesToSpawn = 2 + wave * 2;
   spawnTimer = 0; spawnIdx = 0;
   gameState = 'playing';
 }
 
-function makeGuardian(c, r, dir, type, colorIdx) {
+function makeTank(c, r, dir, type, colorIdx) {
   return { c, r,
     x: c * CELL + CELL/2, y: r * CELL + CELL/2,
     dir,
     type,
     colorIdx: colorIdx||0,
-    hp: type==='guardian' ? 1 : 1,
+    hp: type==='player' ? 1 : 1,
     fireTimer: 0,
     moveTimer: 0,
     aiTimer: Math.floor(Math.random()*20),
@@ -155,11 +154,11 @@ function updateHud() {
   lv.innerHTML = '';
   for(let i=0;i<lives;i++) {
     const s = document.createElement('span');
-    s.className='life-icon'; s.textContent='🌿'; lv.appendChild(s);
+    s.className='life-icon'; s.textContent='🟢'; lv.appendChild(s);
   }
 }
 
-// ── CONTROLES ─────────────────────────────────────────────
+// ── INPUT ─────────────────────────────────────────────────
 const keys={};
 function setupBtn(id,key) {
   const btn=document.getElementById(id);
@@ -194,20 +193,20 @@ function tick(){
   draw();
 }
 
-// ── ACTUALIZACIÓN ─────────────────────────────────────────
+// ── UPDATE ────────────────────────────────────────────────
 const DX=[0,1,0,-1], DY=[-1,0,1,0];
 
 function cellWalkable(c,r){
   if(c<0||c>=COLS||r<0||r>=ROWS) return false;
-  return bosque[r][c]===0;
+  return map[r][c]===0;
 }
 function cellDestructible(c,r){
   if(c<0||c>=COLS||r<0||r>=ROWS) return false;
-  return bosque[r][c]===1;
+  return map[r][c]===1;
 }
 function cellBlocking(c,r){
   if(c<0||c>=COLS||r<0||r>=ROWS) return true;
-  return bosque[r][c]===1||bosque[r][c]===2;
+  return map[r][c]===1||map[r][c]===2;
 }
 
 function update(){
@@ -223,36 +222,39 @@ function update(){
         score=0; lives=3; wave=1; initWave();
       }
     }
-    updateEstallidos();
+    updateExplosions();
     return;
   }
 
-  // Spawn espíritus
+  // Spawn enemigos
   spawnTimer--;
-  if(spawnTimer<=0 && spiritsToSpawn>0){
-    const sp=ESPIRITU_SPAWNS[spawnIdx%ESPIRITU_SPAWNS.length];
-    const occ=spirits.some(e=>e.c===sp.c&&e.r===sp.r)||
-              (guardian.c===sp.c&&guardian.r===sp.r);
+  if(spawnTimer<=0 && enemiesToSpawn>0){
+    const sp=ENEMY_SPAWNS[spawnIdx%ENEMY_SPAWNS.length];
+    const occ=enemies.some(e=>e.c===sp.c&&e.r===sp.r)||
+              (player.c===sp.c&&player.r===sp.r);
     if(!occ){
-      spirits.push(makeGuardian(sp.c,sp.r,2,  'spirit', spawnIdx%4));
-      spiritsToSpawn--;
+      enemies.push(makeTank(sp.c,sp.r,2,  'enemy', spawnIdx%4));
+      enemiesToSpawn--;
       spawnIdx++;
     }
     spawnTimer=15;
   }
 
-  updateGuardian();
-  spirits.forEach(e=>{ if(e.alive) updateSpirit(e); });
-  updateProyectiles();
-  updateEstallidos();
+  updatePlayer();
+  enemies.forEach(e=>{ if(e.alive) updateEnemy(e); });
+  updateBullets();
+  updateExplosions();
 
-  if(spiritsToSpawn===0 && spirits.filter(e=>e.alive).length===0){
-    gameState='wave_clear'; stateTimer=40;
+  // MEJOR DETECCIÓN DE OLA COMPLETA
+  const aliveEnemies = enemies.filter(e=>e.alive).length;
+  if(enemiesToSpawn <= 0 && aliveEnemies === 0){
+    gameState='wave_clear'; 
+    stateTimer=45;
   }
 }
 
-function updateGuardian(){
-  if(!guardian.alive) return;
+function updatePlayer(){
+  if(!player.alive) return;
 
   let moved=false;
   let wantDir=-1;
@@ -262,41 +264,41 @@ function updateGuardian(){
   if(keys.left)  wantDir=3;
 
   if(wantDir>=0){
-    guardian.dir=wantDir;
-    if(guardian.moveTimer<=0){
-      const nc=guardian.c+DX[wantDir], nr=guardian.r+DY[wantDir];
-      if(cellWalkable(nc,nr) && !guardianAt(nc,nr,guardian)){
-        guardian.c=nc; guardian.r=nr;
-        guardian.x=nc*CELL+CELL/2; guardian.y=nr*CELL+CELL/2;
-        guardian.moveTimer=2;
+    player.dir=wantDir;
+    if(player.moveTimer<=0){
+      const nc=player.c+DX[wantDir], nr=player.r+DY[wantDir];
+      if(cellWalkable(nc,nr) && !tankAt(nc,nr,player)){
+        player.c=nc; player.r=nr;
+        player.x=nc*CELL+CELL/2; player.y=nr*CELL+CELL/2;
+        player.moveTimer=2;
         moved=true;
       }
     }
-    guardian.moving=true;
+    player.moving=true;
   } else {
-    guardian.moving=false;
+    player.moving=false;
   }
-  if(guardian.moveTimer>0) guardian.moveTimer--;
+  if(player.moveTimer>0) player.moveTimer--;
 
-  if(keys.fire && guardian.fireTimer<=0){
-    dispararProyectil(guardian);
-    guardian.fireTimer=6;
+  if(keys.fire && player.fireTimer<=0){
+    fireBullet(player);
+    player.fireTimer=6;
     keys.fire=false;
   }
-  if(guardian.fireTimer>0) guardian.fireTimer--;
+  if(player.fireTimer>0) player.fireTimer--;
 }
 
-function updateSpirit(e){
+function updateEnemy(e){
   e.aiTimer--;
   if(e.aiTimer>0) return;
   e.aiTimer = 5+Math.floor(Math.random()*10);
 
-  const dx=guardian.c-e.c, dy=guardian.r-e.r;
+  const dx=player.c-e.c, dy=player.r-e.r;
 
   const facing= e.dir===0&&dy<0 || e.dir===1&&dx>0 ||
                 e.dir===2&&dy>0 || e.dir===3&&dx<0;
   if(facing && e.fireTimer<=0 && Math.random()<0.45){
-    dispararProyectil(e);
+    fireBullet(e);
     e.fireTimer=10;
     return;
   }
@@ -312,7 +314,7 @@ function updateSpirit(e){
 
   for(const d of dirs){
     const nc=e.c+DX[d], nr=e.r+DY[d];
-    if(cellWalkable(nc,nr)&&!guardianAt(nc,nr,e)){
+    if(cellWalkable(nc,nr)&&!tankAt(nc,nr,e)){
       e.dir=d; e.c=nc; e.r=nr;
       e.x=nc*CELL+CELL/2; e.y=nr*CELL+CELL/2;
       break;
@@ -322,13 +324,13 @@ function updateSpirit(e){
   else e.dir=dy>0?2:0;
 }
 
-function guardianAt(c,r,exclude){
-  if(guardian!==exclude&&guardian.alive&&guardian.c===c&&guardian.r===r) return true;
-  return spirits.some(e=>e!==exclude&&e.alive&&e.c===c&&e.r===r);
+function tankAt(c,r,exclude){
+  if(player!==exclude&&player.alive&&player.c===c&&player.r===r) return true;
+  return enemies.some(e=>e!==exclude&&e.alive&&e.c===c&&e.r===r);
 }
 
-function dispararProyectil(tank){
-  proyectiles.push({
+function fireBullet(tank){
+  bullets.push({
     x: tank.x, y: tank.y,
     dx: DX[tank.dir]*CELL*0.9,
     dy: DY[tank.dir]*CELL*0.9,
@@ -338,10 +340,10 @@ function dispararProyectil(tank){
   });
 }
 
-function updateProyectiles(){
-  for(let i=proyectiles.length-1;i>=0;i--){
-    const b=proyectiles[i];
-    if(!b.alive){proyectiles.splice(i,1);continue;}
+function updateBullets(){
+  for(let i=bullets.length-1;i>=0;i--){
+    const b=bullets[i];
+    if(!b.alive){bullets.splice(i,1);continue;}
 
     b.trail.push({x:b.x,y:b.y});
     if(b.trail.length>4) b.trail.shift();
@@ -351,112 +353,107 @@ function updateProyectiles(){
     const bc=Math.floor(b.x/CELL), br=Math.floor(b.y/CELL);
 
     if(cellBlocking(bc,br)){
-      if(cellDestructible(bc,br)) bosque[br][bc]=0;
-      spawnEstallido(b.x,b.y,'small');
-      proyectiles.splice(i,1); continue;
+      if(cellDestructible(bc,br)) map[br][bc]=0;
+      spawnExplosion(b.x,b.y,'small');
+      bullets.splice(i,1); continue;
     }
 
-    if(b.owner==='spirit'&&guardian.alive){
-      if(Math.abs(b.x-guardian.x)<CELL*0.7&&Math.abs(b.y-guardian.y)<CELL*0.7){
-        spawnEstallido(guardian.x,guardian.y,'big');
-        guardian.alive=false;
+    if(b.owner==='enemy'&&player.alive){
+      if(Math.abs(b.x-player.x)<CELL*0.7&&Math.abs(b.y-player.y)<CELL*0.7){
+        spawnExplosion(player.x,player.y,'big');
+        player.alive=false;
         lives--;
         gameState='dead'; stateTimer=35;
         updateHud();
-        proyectiles.splice(i,1); continue;
+        bullets.splice(i,1); continue;
       }
     }
 
-    if(b.owner==='guardian'){
-      for(const e of spirits){
+    if(b.owner==='player'){
+      for(const e of enemies){
         if(!e.alive) continue;
         if(Math.abs(b.x-e.x)<CELL*0.7&&Math.abs(b.y-e.y)<CELL*0.7){
-          spawnEstallido(e.x,e.y,'big');
+          spawnExplosion(e.x,e.y,'big');
           e.alive=false;
           score+=100*(wave);
           updateHud();
-          proyectiles.splice(i,1); break;
+          bullets.splice(i,1); break;
         }
       }
     }
 
-    if(b.x<0||b.x>W||b.y<0||b.y>H){proyectiles.splice(i,1);}
+    if(b.x<0||b.x>W||b.y<0||b.y>H){bullets.splice(i,1);}
   }
 }
 
-function spawnEstallido(x,y,size){
+function spawnExplosion(x,y,size){
   const count=size==='big'?14:7;
   const maxR=size==='big'?CELL*0.55:CELL*0.3;
   const life=size==='big'?10:6;
   for(let i=0;i<count;i++){
     const a=Math.random()*Math.PI*2;
     const sp=(0.5+Math.random())*CELL*0.25;
-    estallidos.push({
+    explosions.push({
       x,y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp,
       r:maxR*(0.3+Math.random()*0.7), life, maxLife:life,
-      color:C.estallido[Math.floor(Math.random()*C.estallido.length)],
+      color:C.explosion[Math.floor(Math.random()*C.explosion.length)],
     });
   }
 }
 
-function updateEstallidos(){
-  for(let i=estallidos.length-1;i>=0;i--){
-    const e=estallidos[i];
+function updateExplosions(){
+  for(let i=explosions.length-1;i>=0;i--){
+    const e=explosions[i];
     e.x+=e.vx; e.y+=e.vy; e.life--;
-    if(e.life<=0) estallidos.splice(i,1);
+    if(e.life<=0) explosions.splice(i,1);
   }
 }
 
-// ── DIBUJO ────────────────────────────────────────────────
+// ── DRAW ─────────────────────────────────────────────────
 function draw(){
-  ctx.fillStyle='#0f2a12'; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='#1a1a2e'; ctx.fillRect(0,0,W,H);
 
   const ox=Math.floor((W-COLS*CELL)/2);
   const oy=Math.floor((H-ROWS*CELL)/2);
 
   ctx.save(); ctx.translate(ox,oy);
 
-  drawBosque();
-  drawProyectiles();
-  if(guardian.alive) drawGuardian(guardian);
-  spirits.forEach(e=>{ if(e.alive) drawGuardian(e); });
-  drawEstallidos();
+  drawMap();
+  drawBullets();
+  if(player.alive) drawTank(player);
+  enemies.forEach(e=>{ if(e.alive) drawTank(e); });
+  drawExplosions();
 
   ctx.restore();
 
   drawOverlay();
 }
 
-function drawBosque(){
+function drawMap(){
   for(let r=0;r<ROWS;r++){
     for(let c=0;c<COLS;c++){
-      const x=c*CELL, y=r*CELL, cell=bosque[r][c];
+      const x=c*CELL, y=r*CELL, cell=map[r][c];
       if(cell===0){
-        ctx.fillStyle=(c+r)%2===0?C.suelo:C.sueloDark;
+        ctx.fillStyle=(c+r)%2===0?C.grass:C.grassDark;
         ctx.fillRect(x,y,CELL,CELL);
-        // Detalle musgo
-        if((c+r)%3===0){
-          ctx.fillStyle='rgba(60,120,40,0.3)';
-          ctx.fillRect(x+2,y+2,4,4);
-        }
       } else if(cell===1){
-        // Raíces destructibles
-        ctx.fillStyle='#5c3d1f';
+        ctx.fillStyle='#8b5e3c';
         ctx.fillRect(x,y,CELL,CELL);
-        ctx.fillStyle='#8b7355';
-        ctx.fillRect(x+2,y+2,CELL-4,6);
-        ctx.fillRect(x+2,y+CELL-8,CELL-4,6);
+        ctx.fillStyle='#a0724a';
+        const bw=CELL/2-1, bh=CELL/2-1;
+        ctx.fillRect(x+1,   y+1,   bw,bh);
+        ctx.fillRect(x+CELL/2+1,y+1,   bw,bh);
+        ctx.fillRect(x+CELL/4,  y+CELL/2+1,bw+CELL/4,bh);
         ctx.strokeStyle='rgba(0,0,0,0.3)'; ctx.lineWidth=1;
         ctx.strokeRect(x,y,CELL,CELL);
       } else if(cell===2){
-        // Pilar de piedra antiguo
         const sg=ctx.createLinearGradient(x,y,x+CELL,y+CELL);
-        sg.addColorStop(0,'#6b5535'); sg.addColorStop(0.5,'#a08060'); sg.addColorStop(1,'#4a3525');
+        sg.addColorStop(0,'#888'); sg.addColorStop(0.5,'#bbb'); sg.addColorStop(1,'#666');
         ctx.fillStyle=sg; ctx.fillRect(x,y,CELL,CELL);
-        ctx.strokeStyle='rgba(255,255,255,0.12)'; ctx.lineWidth=1;
+        ctx.strokeStyle='rgba(255,255,255,0.15)'; ctx.lineWidth=1;
         ctx.beginPath();
-        ctx.moveTo(x+4,y+4); ctx.lineTo(x+CELL-4,y+CELL-4);
-        ctx.moveTo(x+CELL-4,y+4); ctx.lineTo(x+4,y+CELL-4);
+        ctx.moveTo(x,y); ctx.lineTo(x+CELL,y+CELL);
+        ctx.moveTo(x+CELL,y); ctx.lineTo(x,y+CELL);
         ctx.stroke();
         ctx.strokeStyle='rgba(0,0,0,0.3)'; ctx.lineWidth=1;
         ctx.strokeRect(x,y,CELL,CELL);
@@ -465,11 +462,11 @@ function drawBosque(){
   }
 }
 
-function drawGuardian(t){
+function drawTank(t){
   const x=t.x, y=t.y;
-  const isGuardian=t.type==='guardian';
-  const col=isGuardian?C.guardianBody:C.spirit[t.colorIdx%4];
-  const dark=isGuardian?C.guardianDark:darken(col,40);
+  const isPlayer=t.type==='player';
+  const col=isPlayer?C.playerBody:C.enemy[t.colorIdx%4];
+  const dark=isPlayer?C.playerDark:darken(col,40);
   const s=CELL*0.42;
 
   ctx.save(); ctx.translate(x,y);
@@ -512,37 +509,37 @@ function drawGuardian(t){
   ctx.strokeStyle=dark; ctx.lineWidth=1;
   ctx.strokeRect(-s*0.1,-s*0.9,s*0.2,s*0.7);
 
-  ctx.fillStyle='#3a2a1a';
+  ctx.fillStyle='#333';
   ctx.fillRect(-s*0.09,-s*0.95,s*0.18,s*0.12);
 
-  if(isGuardian){
-    ctx.fillStyle='rgba(212,160,23,0.85)';
+  if(isPlayer){
+    ctx.fillStyle='rgba(255,255,255,0.7)';
     ctx.font=`${Math.max(8,s*0.5)}px sans-serif`;
     ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText('🌿',0,0);
+    ctx.fillText('★',0,0);
   }
 
   ctx.restore();
 }
 
-function drawProyectiles(){
-  proyectiles.forEach(b=>{
+function drawBullets(){
+  bullets.forEach(b=>{
     b.trail.forEach((t,i)=>{
       ctx.globalAlpha=(i/b.trail.length)*0.4;
-      ctx.fillStyle=C.semilla;
+      ctx.fillStyle=C.bullet;
       ctx.beginPath(); ctx.arc(t.x,t.y,3*(i/b.trail.length+0.2),0,Math.PI*2); ctx.fill();
     });
     ctx.globalAlpha=1;
 
-    ctx.shadowColor=C.semilla; ctx.shadowBlur=8;
-    ctx.fillStyle=C.semilla;
+    ctx.shadowColor=C.bullet; ctx.shadowBlur=8;
+    ctx.fillStyle=C.bullet;
     ctx.beginPath(); ctx.arc(b.x,b.y,4,0,Math.PI*2); ctx.fill();
     ctx.shadowBlur=0;
   });
 }
 
-function drawEstallidos(){
-  estallidos.forEach(e=>{
+function drawExplosions(){
+  explosions.forEach(e=>{
     ctx.globalAlpha=e.life/e.maxLife;
     ctx.fillStyle=e.color;
     ctx.shadowColor=e.color; ctx.shadowBlur=6;
@@ -554,33 +551,33 @@ function drawEstallidos(){
 function drawOverlay(){
   if(gameState==='wave_clear'){
     ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(0,0,W,H);
-    ctx.fillStyle='#d4a017'; ctx.shadowColor='#d4a017'; ctx.shadowBlur=16;
+    ctx.fillStyle='#f7c948'; ctx.shadowColor='#f7c948'; ctx.shadowBlur=16;
     ctx.font=`bold ${Math.max(16,W/12)}px 'Courier New'`;
     ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText('¡GUARDIA '+wave+' COMPLETA!',W/2,H/2-10);
+    ctx.fillText('¡OLA '+wave+' COMPLETA!',W/2,H/2-10);
     ctx.shadowBlur=0; ctx.fillStyle='#aaa';
     ctx.font=`${Math.max(9,W/28)}px 'Courier New'`;
-    ctx.fillText('SABIDURÍA: '+score,W/2,H/2+20);
+    ctx.fillText('SCORE: '+score,W/2,H/2+20);
     ctx.textAlign='left'; ctx.textBaseline='alphabetic';
   } else if(gameState==='dead'){
-    ctx.fillStyle='rgba(139,115,85,0.25)'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='rgba(255,0,0,0.18)'; ctx.fillRect(0,0,W,H);
   } else if(gameState==='gameover'){
     ctx.fillStyle='rgba(0,0,0,0.75)'; ctx.fillRect(0,0,W,H);
-    ctx.fillStyle='#8b5e3c'; ctx.shadowColor='#8b5e3c'; ctx.shadowBlur=18;
+    ctx.fillStyle='#ff4444'; ctx.shadowColor='#ff4444'; ctx.shadowBlur=18;
     ctx.font=`bold ${Math.max(18,W/11)}px 'Courier New'`;
     ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText('EL BOSQUE CAE',W/2,H/2-14);
-    ctx.shadowBlur=0; ctx.fillStyle='#d4a017';
+    ctx.fillText('GAME OVER',W/2,H/2-14);
+    ctx.shadowBlur=0; ctx.fillStyle='#f7c948';
     ctx.font=`bold ${Math.max(10,W/22)}px 'Courier New'`;
-    ctx.fillText('SABIDURÍA: '+score,W/2,H/2+18);
+    ctx.fillText('SCORE: '+score,W/2,H/2+18);
     ctx.fillStyle='#aaa';
     ctx.font=`${Math.max(8,W/30)}px 'Courier New'`;
-    ctx.fillText('reiniciando el bosque...',W/2,H/2+40);
+    ctx.fillText('reiniciando...',W/2,H/2+40);
     ctx.textAlign='left'; ctx.textBaseline='alphabetic';
   }
 }
 
-// ── AYUDANTES DE COLOR ────────────────────────────────────
+// ── COLOR HELPERS ─────────────────────────────────────────
 function lighten(hex,a){return adjust(hex,a);}
 function darken(hex,a) {return adjust(hex,-a);}
 function adjust(hex,a){
